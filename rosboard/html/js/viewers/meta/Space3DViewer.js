@@ -60,6 +60,11 @@ class Space3DViewer extends Viewer {
     this.gl.captureMouse(true, true);
 		this.gl.onmouse = function(e) {
 			if(e.dragging) {
+        // litegl.min.js sets correct value for rightButton, but not in the event object that is passed to this function here. 
+        // maybe this is an litegl bug? 
+        // we don't want to modify the minified version, so to work around around this: 
+        // just set the value for rightButton here.
+        e.rightButton = !!(e.buttons & 2);
         if(e.rightButton) {
           that.cam_offset_x += e.deltax/30 * Math.sin(that.cam_theta);
           that.cam_offset_y -= e.deltax/30 * Math.cos(that.cam_theta);
