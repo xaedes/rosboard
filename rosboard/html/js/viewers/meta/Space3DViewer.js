@@ -216,6 +216,22 @@ class Space3DViewer extends Viewer {
     return(c);
   }
 
+  _getColorMapped(v, vmin, vmax, cmap_name, cmap_reversed) {
+    if (v < vmin)
+       v = vmin;
+    if (v > vmax)
+       v = vmax;
+    let dv = vmax - vmin;
+    let scale = 0;
+    if(dv > 1e-2) scale = 1.0/dv;
+    v = (v - vmin)*scale;
+    let c = cmap(v, cmap_name, cmap_reversed);
+    c[0] /= 255.0;
+    c[1] /= 255.0;
+    c[2] /= 255.0;
+    return c;
+  }
+
   draw(drawObjects) {
     this.drawObjects = drawObjects;
     let drawObjectsGl = [];
@@ -234,13 +250,31 @@ class Space3DViewer extends Viewer {
         let colors = new Float32Array(drawObject.data.length / 3 * 4);
         let zmin = drawObject.zmin || -2;
         let zmax = drawObject.zmax || 2;
-        let zrange = zmax - zmin;
-        for(let j=0; j < drawObject.data.length / 3; j++) {
-          let c = this._getColor(drawObject.data[3*j+2], zmin, zmax)
-          colors[4*j] = c[0];
-          colors[4*j+1] = c[1];
-          colors[4*j+2] = c[2];
-          colors[4*j+3] = 1;
+        let auxStep = drawObject.auxStep || 0;
+        let auxData = drawObject.auxData || [];
+        let auxFields = drawObject.auxFields || [];
+        let auxMin = drawObject.auxMin || [];
+        let auxMax = drawObject.auxMax || [];
+        if (auxStep > 0) {
+          for(let j=0; j < auxData.length / auxStep; j++) {
+            let k = 0;
+            let c = this._getColorMapped(auxData[j*auxStep+k], auxMin[k], auxMax[k], 'gist_rainbow', false);
+            colors[4*j+0] = c[0];
+            colors[4*j+1] = c[1];
+            colors[4*j+2] = c[2];
+            colors[4*j+3] = 1;            
+          }
+        } else {
+          let zrange = zmax - zmin;
+          for(let j=0; j < drawObject.data.length / 3; j++) {
+            let c = this._getColorMapped(drawObject.data[3*j+2], zmin, zmax, 'viridis', true);
+            // let c = this._getColor(drawObject.data[3*j+2], zmin, zmax)
+            // c[1] = 1.0;
+            colors[4*j] = c[0];
+            colors[4*j+1] = c[1];
+            colors[4*j+2] = c[2];
+            colors[4*j+3] = 1;
+          }
         }
         let points = drawObject.data;
         drawObjectsGl.push({type: "points", mesh: GL.Mesh.load({vertices: points, colors: colors}, null, null, this.gl)});

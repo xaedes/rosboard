@@ -84,10 +84,45 @@ class PointCloud2Viewer extends Space3DViewer {
       points[3*i+2] = (points_view.getUint16(offset+4, true) / 65535) * zrange + zmin;
     }
 
+    let aux_bounds = msg._data_uint16.aux_bounds;
+    let aux_fields = msg._data_uint16.aux_fields;
+    let aux_data = null;
+    let aux_view = null;
+    let aux = [];
+    if (msg._data_uint16.aux_data.length > 0) {
+      aux_data = this._base64decode(msg._data_uint16.aux_data);
+      aux_view = new DataView(aux_data);
+      aux = new Float32Array(Math.round(aux_data.byteLength / 2));
+    }
+
+    let aux_len = 0;
+    if (aux_fields.length > 0) {
+      aux_len = aux.length / aux_fields.length;
+    }
+    let aux_range = [];
+    let aux_min = [];
+    let aux_max = [];
+    for (let i=0; i<aux_fields.length; i++) {
+      let _min = aux_bounds[2*i+0];
+      let _max = aux_bounds[2*i+1];
+      let range = _max - _min;
+      aux_range.push(range);
+      aux_min.push(_min);
+      aux_max.push(_max);
+    }
+    let aux_byte_step = 2 * aux_fields.length;
+    for(let i=0; i<aux_len; i++) {
+      let offset = i * aux_byte_step;
+      for(let k=0; k<aux_fields.length; k++) {
+        aux[aux_fields.length*i + k] = (aux_view.getUint16(offset+2*k, true) / 65535) * aux_range[k] + aux_min[k];
+      }
+    }
+
     this.draw([
       {type: "path", data: [0, 0, 0, 1], color: "#00f060", lineWidth: 2},
       {type: "path", data: [0, 0, 1, 0], color: "#f06060", lineWidth: 2},
-      {type: "points", data: points, zmin: zmin, zmax: zmin + zrange},
+      // {type: "points", data: points, zmin: zmin, zmax: zmin + zrange},
+      {type: "points", data: points, zmin: zmin, zmax: zmin + zrange, auxData: aux, auxMin: aux_min, auxMax: aux_max, auxStep: aux_fields.length, auxFields:aux_fields},
     ]);
   }
 
@@ -118,6 +153,26 @@ class PointCloud2Viewer extends Space3DViewer {
       return;
     }
 
+    let fieldNames = ["x", "y", "z"];
+    
+    let _auxFields = ["intensity", "reflectivity"];
+    let auxFields = [];
+    let auxStep = 0; 
+    console.log("aux fields");
+    
+    for (let i=0; i<_auxFields.length; i++) {
+      console.log("aux field");
+      console.log(_auxFields[i]);
+      if (_auxFields[i] in fields) {
+        auxStep += 1;
+        auxFields.push(_auxFields[i]);
+      }
+    }
+
+    let auxData = [];
+    if (auxStep > 0) {
+      auxData = new Float32Array(Math.round(data.byteLength / msg.point_step * auxStep));
+    } 
     let points = new Float32Array(Math.round(data.byteLength / msg.point_step * 3));
     let view = new DataView(data);
     let littleEndian = !msg.is_bigendian;
@@ -133,18 +188,32 @@ class PointCloud2Viewer extends Space3DViewer {
       zOffset = fields["z"].offset;
       zDataGetter = this._getDataGetter(fields["z"].datatype, view);
     }
-    
+
+    let auxOffsets = [];
+    let auxDataGetters = [];
+
+    for (let i=0; i<auxFields.length; i++) {
+      let field = auxFields[i];
+      let _Offset = fields[field].offset;
+      let _DataGetter = this._getDataGetter(fields[field].datatype, view);
+      auxOffsets.push(_Offset);
+      auxDataGetters.push(_DataGetter);
+    }
+
     for(let i=0; i<data.byteLength/msg.point_step-1; i++) {
       let offset = i * msg.point_step;
       points[3*i] = xDataGetter(offset + xOffset, littleEndian); // x
       points[3*i+1] = yDataGetter(offset + yOffset, littleEndian); // y
       points[3*i+2] = zDataGetter(offset + zOffset, littleEndian); // y
+      for (let k=0; k<auxDataGetters.length; k++) {
+        auxData[auxStep*i+k] = auxDataGetters[k](offset + auxOffsets[k], littleEndian);
+      }
     }
 
     this.draw([
       {type: "path", data: [0, 0, 0, 1], color: "#00f060", lineWidth: 2},
       {type: "path", data: [0, 0, 1, 0], color: "#f06060", lineWidth: 2},
-      {type: "points", data: points, zmin: -2.0, zmax: 2.0},
+      {type: "points", data: points, zmin: -2.0, zmax: 2.0, auxData: auxData, auxStep: auxStep, auxFields:auxFields},
     ]);
   }
 }

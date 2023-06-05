@@ -86,11 +86,18 @@ def decode_pcl2(cloud, field_names=None, skip_nans=False, uvs=[]):
     all_field_names = []
     np_struct = []
     total_used_bytes = 0
+    padding_counter = 0
     for field in cloud.fields:
+
         all_field_names.append(field.name)
         assert field.datatype in _PCL2_DATATYPES_NUMPY_MAP, \
             'invalid datatype %d specified for field %s' % (field.datatype, field.name)
         field_np_datatype = _PCL2_DATATYPES_NUMPY_MAP[field.datatype]
+        num_padding = field.offset - total_used_bytes
+        for k in range(num_padding):
+            np_struct.append(("_pad_%03d" % padding_counter, np.uint8))
+            padding_counter += 1
+        total_used_bytes += num_padding
         np_struct.append((field.name, field_np_datatype))
         total_used_bytes += np.nbytes[field_np_datatype]
 
@@ -262,7 +269,22 @@ def compress_point_cloud2(msg, output):
         decode_fields = ("x", "y", "z")
     else:
         decode_fields = ("x", "y")
-    
+
+    _aux_fields = []
+    # _aux_fields = ["intensity", "reflectivity"]
+    # _aux_fields = ["intensity"]
+    # _aux_fields = ["x"]
+    _aux_fields = ["reflectivity"]
+    # _aux_fields = ["foo"]
+    # _aux_fields = ["range"]
+    aux_fields = []
+    for f in _aux_fields:
+        if f in field_names:
+            aux_fields.append(f)
+            if f not in decode_fields:
+                decode_fields = decode_fields + (f,)
+    # print("decode_fields", decode_fields)
+
     try:
         points = decode_pcl2(msg, field_names = decode_fields, skip_nans = True)
     except AssertionError as e:
@@ -299,16 +321,43 @@ def compress_point_cloud2(msg, output):
         zmin = 0.0
         zpoints_uint16 = ypoints_uint16 * 0
     
+    aux_data = np.zeros(shape=(points.shape[0], len(aux_fields)), dtype=np.uint16)
+    aux_bounds = []
+    for k,f in enumerate(aux_fields):
+        # print("aux",k,f)
+        aux = points[f].astype(np.float32)
+        # print(aux[::256])
+        auxmin = np.min(aux)
+        auxmax = np.max(aux)
+        if auxmax - auxmin < 1.0:
+            auxmax = auxmin + 1.0
+        aux_bounds.append(auxmin)
+        aux_bounds.append(auxmax)
+        aux_data[:,k] = ((65535 * (aux - auxmin) / (auxmax - auxmin)).astype(np.uint16))
+    # print("aux_bounds", aux_bounds)
     bounds_uint16 = [xmin, xmax, ymin, ymax, zmin, zmax]
+    # print("bounds_uint16", bounds_uint16)
     if np.little_endian:
+        # print("xpoints_uint16.shape", xpoints_uint16.shape)
+        # print("np.stack((xpoints_uint16, ypoints_uint16, zpoints_uint16),1).shape", np.stack((xpoints_uint16, ypoints_uint16, zpoints_uint16),1).shape)
         points_uint16 = np.stack((xpoints_uint16, ypoints_uint16, zpoints_uint16),1).ravel().view(dtype=np.uint8)
+        if len(aux_data) > 0:
+            # print("aux_data.shape", aux_data.shape)
+            aux_uint16 = aux_data.ravel().view(dtype=np.uint8)
+            # aux_uint16 = np.stack(aux_data,1).ravel().view(dtype=np.uint8)
     else:
         points_uint16 = np.stack((xpoints_uint16, ypoints_uint16, zpoints_uint16),1).ravel().byteswap().view(dtype=np.uint8)
+        if len(aux_data) > 0:
+            aux_uint16 = aux_data.ravel().byteswap().view(dtype=np.uint8)
+            # aux_uint16 = np.stack(aux_data,1).ravel().byteswap().view(dtype=np.uint8)
 
     output["_data_uint16"] = {
         "type": "xyz",
         "bounds": list(map(float, bounds_uint16)),
         "points": base64.b64encode(points_uint16).decode(),
+        "aux_bounds": list(map(float, aux_bounds)),
+        "aux_data": base64.b64encode(aux_uint16).decode() if len(aux_data)>0 else "",
+        "aux_fields": aux_fields
     }
 
 
