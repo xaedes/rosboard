@@ -8,6 +8,7 @@ importJsOnce("js/viewers/ImageViewer.js");
 importJsOnce("js/viewers/LogViewer.js");
 importJsOnce("js/viewers/ProcessListViewer.js");
 importJsOnce("js/viewers/MapViewer.js");
+importJsOnce("js/viewers/MapPathViewer.js");
 importJsOnce("js/viewers/LaserScanViewer.js");
 importJsOnce("js/viewers/GeometryViewer.js");
 importJsOnce("js/viewers/PolygonViewer.js");

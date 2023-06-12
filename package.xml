@@ -8,9 +8,11 @@
   <license>BSD</license>
 
   <buildtool_depend condition="$ROS_VERSION == 1">catkin</buildtool_depend>
+  <buildtool_depend condition="$ROS_VERSION == 1">message_generation</buildtool_depend>
 
   <depend>python3-tornado</depend>
   <depend>python3-simplejpeg-pip</depend>
+  <depend>sensor_msgs</depend>
 
   <export>
     <build_type condition="$ROS_VERSION == 1">catkin</build_type>
