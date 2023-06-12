@@ -53,7 +53,9 @@ class MapPathViewer extends Viewer {
       this.polyline.addTo(this.mapLeaflet);
       if (points.length > 0) {
         let bounds = L.latLngBounds(points);
-        this.mapLeaflet.fitBounds(bounds);
+        this.mapLeaflet.fitBounds(bounds, {
+          padding: [10, 10]
+        });
       }
   }
 }
